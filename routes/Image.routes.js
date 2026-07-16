@@ -11,6 +11,43 @@ const upload = require('../imageSettings/imageMiddleware');
 
 const authMiddleware = require('../middleware/authMiddleware');
 
+//get all images of an album
+router.get("/albums/:albumId/images", authMiddleware, async (req, res) => {
+    try {
+        const album = await Album.findById(req.params.albumId);
+
+        if (!album) {
+            return res.status(404).json({
+                message: "Album not found"
+            });
+        }
+
+        const hasAccess =
+            album.ownerId.equals(req.user._id) ||
+            album.sharedUsers.some(user => user.equals(req.user._id));
+
+        if (!hasAccess) {
+            return res.status(403).json({
+                message: "Access denied"
+            })
+        }
+
+        const images = await Image.find({
+            albumId: req.params.albumId
+        });
+
+        res.status(200).json(images);
+
+    } catch (error) {
+
+        console.log(error);
+
+        res.status(500).json({
+            message: "Failed to fetch images"
+        });
+    }
+})
+
 //upload image
 router.post("/albums/:albumId/images", authMiddleware, upload.single("image"), async (req, res) => {
     try {
@@ -50,7 +87,7 @@ router.post("/albums/:albumId/images", authMiddleware, upload.single("image"), a
             name: req.file.originalname,
             filePath: result.secure_url,
             size: req.file.size,
-            tags: tags ? Array.isArray(tags) ? tags: tags.split(",").map(tag => tag.trim()) : [],
+            tags: tags ? Array.isArray(tags) ? tags : tags.split(",").map(tag => tag.trim()) : [],
             person,
             isFavourite: isFavourite === "true",
             publicId: result.public_id,
@@ -65,7 +102,7 @@ router.post("/albums/:albumId/images", authMiddleware, upload.single("image"), a
 });
 
 //favourite image
-router.post("/albums/:albumId/images/:imageId/favourite", authMiddleware, async (req, res) => {
+router.post("/albums/:albumId/images/:imageId/favourites", authMiddleware, async (req, res) => {
     try {
         const { isFavourite } = req.body;
 
@@ -85,6 +122,32 @@ router.post("/albums/:albumId/images/:imageId/favourite", authMiddleware, async 
     };
 });
 
+// GET ALL FAVOURITE IMAGES
+router.get("/images/favourites", authMiddleware, async (req, res) => {
+    try {
+        // Find all albums user has access to
+        const albums = await Album.find({
+            $or: [
+                { ownerId: req.user._id },
+                { sharedUsers: req.user._id }
+            ]
+        });
+        const albumIds = albums.map(album => album._id);
+
+        // Only favourite images
+        const favouriteImages = await Image.find({
+            albumId: { $in: albumIds },
+            isFavourite: true
+        }).populate("albumId", "name");
+
+        res.status(200).json(favouriteImages);
+
+    } catch (error) {
+        console.log(error);
+        res.status(500).json({message: "Failed to fetch favourite images"});
+    }
+});
+
 //add comment
 router.post("/albums/:albumId/images/:imageId/comments", authMiddleware, async (req, res) => {
     try {
@@ -93,7 +156,7 @@ router.post("/albums/:albumId/images/:imageId/comments", authMiddleware, async (
         if (!image) {
             return res.status(404).json({ message: "Image not found" });
         };
-        image.comments.push(comment);
+        image.comments.push({ text: comment, commentedBy: req.user._id, });
         await image.save();
         res.status(201).json({ message: "Comment added", image });
     } catch (error) {
@@ -101,6 +164,31 @@ router.post("/albums/:albumId/images/:imageId/comments", authMiddleware, async (
         res.status(500).json({ message: "Filed to add comment" });
     };
 });
+
+router.delete("/albums/:albumId/images/:imageId/comments/:commentId", authMiddleware, async (req, res) => {
+
+    try {
+        const image = await Image.findById(req.params.imageId);
+
+        if (!image) {
+            return res.status(404).json({
+                message: "Image not found"
+            });
+        }
+        image.comments = image.comments.filter(
+            comment => comment._id.toString() !== req.params.commentId
+        );
+        await image.save();
+        res.status(200).json(image);
+
+    } catch (error) {
+        console.log(error);
+        res.status(500).json({
+            message: "Failed to delete comment"
+        });
+    }
+}
+);
 
 //delete image
 router.delete("/albums/:albumId/images/:imageId", authMiddleware, async (req, res) => {
@@ -111,17 +199,85 @@ router.delete("/albums/:albumId/images/:imageId", authMiddleware, async (req, re
         };
         //checking ownership
         const album = await Album.findById(image.albumId);
-        if (!album.ownerId.equals(req.user._id)){
+        if (!album.ownerId.equals(req.user._id)) {
             return res.status(403).json({ message: "Only owner can delete image" });
         };
 
-        await cloudinary.uploader.destroy(publicId);
+        await cloudinary.uploader.destroy(image.publicId);
         await Image.findByIdAndDelete(req.params.imageId);
 
         res.json({ message: "Image deleted successfully" });
     } catch (error) {
         console.log("The error is :", error);
         res.status(500).json({ message: "Filed to delete image" });
+    }
+});
+
+//Get image by id
+router.get("/albums/:albumId/images/:imageId", authMiddleware, async (req, res) => {
+    try {
+        const image = await Image.findById(req.params.imageId).populate("comments.commentedBy", "name");
+        if (!image) {
+            return res.status(404).json({ message: "image not found" });
+        };
+        res.status(200).json(image);
+    } catch (error) {
+        console.log("The error is --", error);
+        res.status(500).json({ message: "Failed to fetch image" })
+    }
+});
+
+//update image by id
+router.post("/albums/:albumId/images/:imageId", authMiddleware, async (req, res) => {
+    try {
+        const { name, tags, person, isFavourite } = req.body;
+        const image = await Image.findById(req.params.imageId);
+        if (!image) {
+            return res.status(404).json({ message: "image not found" });
+        };
+        image.name = name;
+        image.person = person;
+        image.isFavourite = isFavourite;
+
+        image.tags = Array.isArray(tags)
+            ? tags
+            : tags.split(",").map(tag => tag.trim());
+
+        await image.save();
+
+        res.json(image);
+    } catch (error) {
+        console.log("The error is --", error);
+        res.status(500).json({ message: "Failed to update image" })
+    }
+});
+
+//get all images
+router.get("/images", authMiddleware, async (req, res) => {
+
+    try {
+        const albums = await Album.find({
+            $or: [
+                { ownerId: req.user._id },
+                { sharedUsers: req.user._id }
+            ]
+        });
+
+        const albumIds = albums.map(album => album._id);
+
+        const images = await Image.find({
+            albumId: {
+                $in: albumIds
+            }
+        }).populate("albumId", "name");
+        res.status(200).json(images);
+
+    } catch (error) {
+
+        console.log(error);
+        res.status(500).json({
+            message: "Failed to fetch images"
+        });
     }
 });
 

@@ -16,20 +16,22 @@ router.post("/", authMiddleware, async (req, res) => {
             return res.status(400).json({ message: "Album name is required" });
         };
 
-        const album = await Album.create({
-            name,
-            description,
-            ownerId: req.user._id
-        });
-
-        const exists = await Album.findById({
+        const exists = await Album.findOne({
             ownerId: req.user._id,
             name
-        })
+        });
 
         if (exists) {
-            return res.status(409).json({ message: "Album name already exists"});
-        };
+            return res.status(409).json({
+                message: "Album already exists."
+            });
+        }
+
+        const album = await Album.create({
+            name,
+            description: description || "",
+            ownerId: req.user._id
+        });
 
         res.status(201).json({
             message: "Album created successfully.",
@@ -52,15 +54,67 @@ router.get("/", authMiddleware, async (req, res) => {
         }).populate("ownerId", "name email")
             .populate("sharedUsers", "name email");
 
-        if (albums.length !== 0) {
-            res.json(albums);
-        } else {
-            res.status(404).json({ error: "No album found." });
-        };
+        const albumsWithPreview = await Promise.all(
+            albums.map(async (album) => {
+                const previewImages = await Image.find({ albumId: album._id })
+                    .limit(4)
+                    .select("filePath");
+
+                const totalImages = await Image.countDocuments({
+                    albumId: album._id
+                });
+
+                return {
+                    ...album.toObject(),
+                    previewImages,
+                    totalImages
+                };
+            })
+        );
+
+        res.json(albumsWithPreview);
 
     } catch (error) {
         console.log("The error is - ", error);
         res.status(500).json({ error: "Failed to fetch albums from database" });
+    }
+});
+
+// GET ONLY SHARED ALBUMS
+router.get("/shared/albumlist", authMiddleware, async (req, res) => {
+    try {
+        const albums = await Album.find({
+            ownerId: req.user._id,
+            sharedUsers: { $exists: true, $ne: [] }
+        })
+            .populate("ownerId", "name email")
+            .populate("sharedUsers", "name email");
+
+        const albumsWithPreview = await Promise.all(
+            albums.map(async (album) => {
+
+                const previewImages = await Image.find({
+                    albumId: album._id
+                })
+                    .limit(4)
+                    .select("filePath");
+
+                const totalImages = await Image.countDocuments({
+                    albumId: album._id
+                });
+
+                return {
+                    ...album.toObject(),
+                    previewImages,
+                    totalImages,
+                };
+            })
+        );
+        res.json(albumsWithPreview);
+
+    } catch (err) {
+        console.log(err);
+        res.status(500).json({ message: "Failed to fetch shared albums" });
     }
 });
 
@@ -104,9 +158,7 @@ router.post("/:albumId", authMiddleware, async (req, res) => {
 
         const { description } = req.body;
 
-        const album = await Album.findById({
-            albumId: req.params.albumId
-        });
+        const album = await Album.findById(req.params.albumId);
 
         if (!album) {
             return res.status(404).json({
@@ -130,10 +182,10 @@ router.post("/:albumId", authMiddleware, async (req, res) => {
             album
         });
 
-    } catch (err) {
+    } catch (error) {
         console.log("The error is : ", error);
         res.status(500).json({
-            message: err.message
+            message: error.message
         });
     };
 });
@@ -143,9 +195,7 @@ router.delete("/:albumId", authMiddleware, async (req, res) => {
 
     try {
 
-        const album = await Album.findById({
-            albumId: req.params.albumId
-        });
+        const album = await Album.findById(req.params.albumId);
 
         if (!album) {
 
@@ -174,10 +224,10 @@ router.delete("/:albumId", authMiddleware, async (req, res) => {
             message: "Album deleted successfully."
         });
 
-    } catch (err) {
+    } catch (error) {
         console.log("The error is : ", error);
         res.status(500).json({
-            message: err.message
+            message: error.message
         });
 
     }
@@ -198,9 +248,7 @@ router.post("/:albumId/share", authMiddleware, async (req, res) => {
             });
         }
 
-        const album = await Album.findById({
-            albumId: req.params.albumId
-        });
+        const album = await Album.findById(req.params.albumId);
 
         if (!album) {
 
@@ -249,11 +297,58 @@ router.post("/:albumId/share", authMiddleware, async (req, res) => {
             sharedUsers: users
         });
 
-    } catch (err) {
+    } catch (error) {
         console.log("The error is : ", error);
         res.status(500).json({
             success: false,
-            message: err.message
+            message: error.message
+        });
+    }
+});
+
+// GET ALBUMS SHARED WITH ME
+router.get("/shared-with-me", authMiddleware, async (req, res) => {
+
+    try {
+
+        const albums = await Album.find({
+            ownerId: { $ne: req.user._id },   // not my album
+            sharedUsers: req.user._id         // shared with me
+        })
+            .populate("ownerId", "name email profilePicture")
+            .populate("sharedUsers", "name email");
+
+        const albumsWithPreview = await Promise.all(
+
+            albums.map(async (album) => {
+
+                const previewImages = await Image.find({
+                    albumId: album._id
+                })
+                    .limit(4)
+                    .select("filePath");
+
+                const totalImages = await Image.countDocuments({
+                    albumId: album._id
+                });
+
+                return {
+                    ...album.toObject(),
+                    previewImages,
+                    totalImages
+                };
+            })
+
+        );
+
+        res.json(albumsWithPreview);
+
+    } catch (err) {
+
+        console.log(err);
+
+        res.status(500).json({
+            message: "Failed to fetch shared albums"
         });
 
     }
