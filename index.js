@@ -7,7 +7,7 @@ app.use(express.json());
 const cors = require("cors");
 
 const corsOption = {
-    origin: "http://localhost:5173",
+    origin: ["http://localhost:5173", "https://pixora-3u5f.vercel.app" ],
     credentials: true,
     optionSuccessStatus: 200,
 };
