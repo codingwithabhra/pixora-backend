@@ -118,39 +118,6 @@ router.get("/shared/albumlist", authMiddleware, async (req, res) => {
     }
 });
 
-//GET ALBUM BY ID -----------------------------
-router.get("/:albumId", authMiddleware, async (req, res) => {
-    try {
-        const albumById = await Album.findById(req.params.albumId)
-            .populate("ownerId", "name email")
-            .populate("sharedUsers", "name email");
-
-        if (!albumById) {
-            return res.status(404).json({
-                message: "Album not found"
-            });
-        };
-
-        const hasAccess =
-            albumById.ownerId._id.equals(req.user._id) ||
-            albumById.sharedUsers.some(user => user._id.equals(req.user._id));
-
-        if (!hasAccess) {
-            return res.status(403).json({
-                message: "Access denied."
-            });
-        };
-
-        res.status(200).json(albumById);
-
-    } catch (error) {
-        console.log("The error is : ", error);
-        res.status(500).json({
-            message: "Failed to fetch the album"
-        });
-    }
-});
-
 //UPDATE PARTICULAR ALBUM--------------------------------
 router.post("/:albumId", authMiddleware, async (req, res) => {
 
@@ -239,12 +206,12 @@ router.post("/:albumId/share", authMiddleware, async (req, res) => {
 
     try {
 
-        const { emails } = req.body;
+        const { userIds } = req.body;
 
-        if (!emails || !Array.isArray(emails)) {
+        if (!userIds || !Array.isArray(userIds) || userIds.length === 0) {
 
             return res.status(400).json({
-                message: "Emails array is required."
+                message: "User id is required."
             });
         }
 
@@ -255,7 +222,6 @@ router.post("/:albumId/share", authMiddleware, async (req, res) => {
             return res.status(404).json({
                 message: "Album not found."
             });
-
         }
 
         if (!album.ownerId.equals(req.user._id)) {
@@ -263,38 +229,38 @@ router.post("/:albumId/share", authMiddleware, async (req, res) => {
             return res.status(403).json({
                 message: "Only owner can share album."
             });
-
         }
 
         const users = await User.find({
-            email: { $in: emails }
+            _id: { $in: userIds }
         });
 
-        if (users.length !== emails.length) {
+        if (users.length !== userIds.length) {
 
             return res.status(404).json({
                 message: "Some users do not exist."
             });
-
         }
 
-        users.forEach(user => {
-
+        users.forEach((user) => {
             if (
-                !album.sharedUsers.some(
-                    shared => shared.equals(user._id)
+                !album.sharedUsers.some((sharedUserId) =>
+                    sharedUserId.equals(user._id)
                 )
             ) {
                 album.sharedUsers.push(user._id);
             }
-
         });
 
         await album.save();
 
+        // Return populated shared users
+        const updatedAlbum = await Album.findById(album._id)
+            .populate("sharedUsers", "name email");
+
         res.status(200).json({
             message: "Album shared successfully.",
-            sharedUsers: users
+            sharedUsers: updatedAlbum.sharedUsers
         });
 
     } catch (error) {
@@ -353,6 +319,39 @@ router.get("/shared-with-me", authMiddleware, async (req, res) => {
 
     }
 
+});
+
+//GET ALBUM BY ID -----------------------------
+router.get("/:albumId", authMiddleware, async (req, res) => {
+    try {
+        const albumById = await Album.findById(req.params.albumId)
+            .populate("ownerId", "name email")
+            .populate("sharedUsers", "name email");
+
+        if (!albumById) {
+            return res.status(404).json({
+                message: "Album not found"
+            });
+        };
+
+        const hasAccess =
+            albumById.ownerId._id.equals(req.user._id) ||
+            albumById.sharedUsers.some(user => user._id.equals(req.user._id));
+
+        if (!hasAccess) {
+            return res.status(403).json({
+                message: "Access denied."
+            });
+        };
+
+        res.status(200).json(albumById);
+
+    } catch (error) {
+        console.log("The error is : ", error);
+        res.status(500).json({
+            message: "Failed to fetch the album"
+        });
+    }
 });
 
 module.exports = router;

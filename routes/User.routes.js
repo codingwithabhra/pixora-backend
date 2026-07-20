@@ -176,16 +176,15 @@ router.get("/profile", authMiddleware, async (req, res) => {
 //fetch all users
 router.get("/all-users", authMiddleware, async (req, res) => {
     try {
-        const { users } = req.body;
-        album.sharedUsers.push(...users);
+        const users = await User.find({}, "name email");
         res.status(200).json(users);
-
     } catch (error) {
         console.log(error);
-        res.status(500).json({ message: "Failed to fetch users" });
+        res.status(500).json({message: "Failed to fetch users"});
     }
 });
 
+// fetch user profile
 router.get("/myprofile", authMiddleware, async (req, res) => {
     try {
         const user = await User.findById(req.user._id);
