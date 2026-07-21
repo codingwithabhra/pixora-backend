@@ -6,7 +6,7 @@ const authMiddleware = (req, res, next) => {
 
     //check header format
     if (!authHeader || !authHeader.startsWith("Bearer ")) {
-        res.status(401).json({
+        return res.status(401).json({
             message: "Invalid token format (Bearer missing)"
         });
     };
@@ -17,7 +17,7 @@ const authMiddleware = (req, res, next) => {
     const token = authHeader.split(" ")[1];
 
     if (!token) {
-        res.status(401).json({
+        return res.status(401).json({
             message: "Token not found after Bearer"
         });
     };
