@@ -8,4 +8,13 @@ cloudinary.config({
     api_secret: process.env.CLOUDINARY_API_SECRET,
 });
 
+// (async () => {
+//   try {
+//     const result = await cloudinary.api.ping();
+//     console.log(result);
+//   } catch (error) {
+//     console.log(error);
+//   }
+// })();
+
 module.exports = cloudinary;

@@ -7,43 +7,53 @@ app.use(express.json());
 const cors = require("cors");
 
 const corsOption = {
-    origin: ["http://localhost:5173", "https://pixora-3u5f.vercel.app" ],
+    origin: ["http://localhost:5173", "https://pixora-3u5f.vercel.app"],
     credentials: true,
     optionSuccessStatus: 200,
 };
 
 app.use(cors(corsOption));
 
-// ---------------------------------------- DATABASE CONNECTION ----------------------------------------
+// ---------------------------------------- START SERVER ----------------------------------------
 
-const { initialisedatabase } = require("./db/db.connect");
-initialisedatabase();
+const startServer = async () => {
+    try {
 
-// ---------------------------------------- AUTH ROUTES ----------------------------------------
+        const { initialisedatabase } = require("./db/db.connect");
+        await initialisedatabase();
 
-const authRoutes = require("./routes/User.routes");
-app.use("/auth", authRoutes);
+        // ---------------------------------------- AUTH ROUTES ----------------------------------------
 
-// ---------------------------------------- ALBUM ROUTES ----------------------------------------
+        const authRoutes = require("./routes/User.routes");
+        app.use("/auth", authRoutes);
 
-const albumRoutes = require("./routes/Album.routes");
-app.use("/albums", albumRoutes);
+        // ---------------------------------------- ALBUM ROUTES ----------------------------------------
 
-// ---------------------------------------- IMAGE ROUTES ----------------------------------------
+        const albumRoutes = require("./routes/Album.routes");
+        app.use("/albums", albumRoutes);
 
-const imageRoutes = require("./routes/Image.routes");
-app.use("/", imageRoutes);
+        // ---------------------------------------- IMAGE ROUTES ----------------------------------------
 
-// ---------------------------------------- TEST ROUTE ----------------------------------------
+        const imageRoutes = require("./routes/Image.routes");
+        app.use("/", imageRoutes);
 
-app.get("/", (req, res) => {
-    res.send("Pixora Backend Running 🚀");
-});
+        // ---------------------------------------- TEST ROUTE ----------------------------------------
 
-// ---------------------------------------- SERVER ----------------------------------------
+        app.get("/", (req, res) => {
+            res.send("Pixora Backend Running 🚀");
+        });
 
-const PORT = 3000;
+        // ---------------------------------------- SERVER ----------------------------------------
 
-app.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
-});
+        const PORT = 3000;
+
+        app.listen(PORT, () => {
+            console.log(`Server running on port ${PORT}`);
+        });
+
+    } catch (error) {
+        console.error("Failed to start server:", error);
+    }
+};
+
+startServer();

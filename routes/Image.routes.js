@@ -72,6 +72,9 @@ router.post("/albums/:albumId/images", authMiddleware, upload.single("image"), a
             return res.status(400).json({ message: "Image required" });
         };
 
+        console.log(req.file);
+        console.log(req.file.path);
+
         //upload to cloudinary
         const result = await cloudinary.uploader.upload(req.file.path, {
             folder: "Pixora/Albums"
@@ -144,7 +147,7 @@ router.get("/images/favourites", authMiddleware, async (req, res) => {
 
     } catch (error) {
         console.log(error);
-        res.status(500).json({message: "Failed to fetch favourite images"});
+        res.status(500).json({ message: "Failed to fetch favourite images" });
     }
 });
 
@@ -277,6 +280,27 @@ router.get("/images", authMiddleware, async (req, res) => {
         console.log(error);
         res.status(500).json({
             message: "Failed to fetch images"
+        });
+    }
+});
+
+//get image by tags
+router.get("/search", authMiddleware, async(req, res)=> {
+    try {
+        const { tag } = req.query;
+
+        if(!tag){
+            return res.status(400).json({message:"Provide a tag"})
+        };
+
+        const image = await Image.find({tags:tag.toLowerCase()});
+        res.status(200).json(image);
+
+    } catch (error) {
+
+        console.log(error);
+        res.status(500).json({
+            message: "Images with that tag, not found"
         });
     }
 });
